@@ -16,7 +16,7 @@
 
 import Foundation
 
-#if DEBUG && os(iOS)
+#if DEBUG
 
 import MatrixSDKCrypto
 
@@ -31,9 +31,12 @@ struct MXCryptoRequests {
     func sendToDevice(request: ToDeviceRequest) async throws {
         return try await performCallbackRequest {
             restClient.sendDirectToDevice(
-                eventType: request.eventType,
-                contentMap: request.contentMap,
-                txnId: nil,
+                payload: .init(
+                    eventType: request.eventType,
+                    contentMap: request.contentMap,
+                    transactionId: nil,
+                    addMessageId: request.addMessageId
+                ),
                 completion: $0
             )
         }
@@ -83,8 +86,15 @@ struct MXCryptoRequests {
     }
     
     func queryKeys(users: [String]) async throws -> MXKeysQueryResponse {
-        return try await performCallbackRequest {
-            restClient.downloadKeys(forUsers: users, completion: $0)
+        return try await performCallbackRequest { completion in
+            _ = restClient.downloadKeysByChunk(
+                forUsers: users,
+                token: nil,
+                success: {
+                    completion(.success($0))
+                }, failure: {
+                    completion(.failure($0 ?? Error.unknownError))
+                })
         }
     }
     
@@ -131,8 +141,9 @@ extension MXCryptoRequests {
     struct ToDeviceRequest {
         let eventType: String
         let contentMap: MXUsersDevicesMap<NSDictionary>
+        let addMessageId: Bool
         
-        init(eventType: String, body: String) throws {
+        init(eventType: String, body: String, addMessageId: Bool) throws {
             guard
                 let json = MXTools.deserialiseJSONString(body) as? [String: [String: NSDictionary]],
                 let contentMap = MXUsersDevicesMap<NSDictionary>(map: json)
@@ -142,6 +153,7 @@ extension MXCryptoRequests {
             
             self.eventType = eventType
             self.contentMap = contentMap
+            self.addMessageId = addMessageId
         }
     }
     

@@ -33,6 +33,8 @@
 #import "MXRefreshTokenData.h"
 #import "MatrixSDKSwiftHeader.h"
 
+#warning File has not been annotated with nullability, see MX_ASSUME_MISSING_NULLABILITY_BEGIN
+
 #pragma mark - Constants definitions
 /**
  Prefix used in path of home server API requests.
@@ -96,6 +98,13 @@ NSString *const kMXTimelineDirectionBackwards           = @"b";
 
 NSString *const MXCredentialsUpdateTokensNotification = @"MXCredentialsUpdateTokensNotification";
 NSString *const kMXCredentialsNewRefreshTokenDataKey = @"refresh_token_data";
+
+/**
+ Threads list request parameters
+ */
+NSString *const kMXThreadsListIncludeAllParameter = @"all";
+NSString *const kMXThreadsListIncludeParticipatedParameter = @"participated";
+
 /**
  The time interval before the access token expires that we will start trying to refresh the token.
  This avoids us having to block other users requests while the token refreshes.
@@ -906,6 +915,30 @@ andUnauthenticatedHandler: (MXRestClientUnauthenticatedHandler)unauthenticatedHa
     return loginFallback;
 }
 
+- (MXHTTPOperation*)generateLoginTokenWithSuccess:(void (^)(MXLoginToken *))success
+                                          failure:(void (^)(NSError *error))failure
+{
+    MXWeakify(self);
+    return [httpClient requestWithMethod:@"POST"
+                                    path:[NSString stringWithFormat:@"%@/org.matrix.msc3882/login/token", kMXAPIPrefixPathUnstable]
+                              parameters:@{}
+                                 success:^(NSDictionary *JSONResponse) {
+        MXStrongifyAndReturnIfNil(self);
+        
+        if (success)
+        {
+            __block MXLoginToken *loginToken;
+            [self dispatchProcessing:^{
+                MXJSONModelSetMXJSONModel(loginToken, MXLoginToken, JSONResponse);
+            } andCompletion:^{
+                success(loginToken);
+            }];
+        }
+    } failure:^(NSError *error) {
+        [self dispatchFailure:error inBlock:failure];
+    }];
+}
+
 
 #pragma mark - password update operation
 
@@ -1159,6 +1192,26 @@ andUnauthenticatedHandler: (MXRestClientUnauthenticatedHandler)unauthenticatedHa
     return [httpClient requestWithMethod:@"PUT"
                                     path:path
                               parameters:data
+                                 success:^(NSDictionary *JSONResponse) {
+                                     MXStrongifyAndReturnIfNil(self);
+                                     [self dispatchSuccess:success];
+                                 }
+                                 failure:^(NSError *error) {
+                                     MXStrongifyAndReturnIfNil(self);
+                                     [self dispatchFailure:error inBlock:failure];
+                                 }];
+}
+
+- (MXHTTPOperation*)deleteAccountDataWithType:(NSString*)type
+                                      success:(void (^)(void))success
+                                      failure:(void (^)(NSError *error))failure
+{
+    NSString *path = [NSString stringWithFormat:@"%@/org.matrix.msc3391/user/%@/account_data/%@", kMXAPIPrefixPathUnstable, credentials.userId, type];
+
+    MXWeakify(self);
+    return [httpClient requestWithMethod:@"DELETE"
+                                    path:path
+                              parameters:nil
                                  success:^(NSDictionary *JSONResponse) {
                                      MXStrongifyAndReturnIfNil(self);
                                      [self dispatchSuccess:success];
@@ -3284,6 +3337,35 @@ andUnauthenticatedHandler: (MXRestClientUnauthenticatedHandler)unauthenticatedHa
                                  }];
 }
 
+- (MXHTTPOperation*)threadsInRoomWithId:(NSString*)roomId
+                                include:(NSString *)include
+                                   from:(nullable NSString*)from
+                                success:(void (^)(MXAggregationPaginatedResponse *response))success
+                                failure:(void (^)(NSError *error))failure
+{
+    NSString *path = [NSString stringWithFormat:@"%@/rooms/%@/threads", kMXAPIPrefixPathV1, [MXTools encodeURIComponent:roomId]];
+    
+    NSDictionary *parameters = from ? @{@"include": include, @"from": from} : @{@"include": include};
+
+    MXWeakify(self);
+    return [httpClient requestWithMethod:@"GET"
+                                    path:path
+                              parameters:parameters
+                                 success:^(NSDictionary *JSONResponse) {
+                                     MXStrongifyAndReturnIfNil(self);
+                                    __block MXAggregationPaginatedResponse *response;
+                                    [self dispatchProcessing:^{
+                                        MXJSONModelSetMXJSONModel(response, MXAggregationPaginatedResponse, JSONResponse);
+                                    } andCompletion:^{
+                                        success(response);
+                                    }];
+                                 }
+                                 failure:^(NSError *error) {
+                                     MXStrongifyAndReturnIfNil(self);
+                                     [self dispatchFailure:error inBlock:failure];
+                                 }];
+}
+
 #pragma mark - Room tags operations
 - (MXHTTPOperation*)tagsOfRoom:(NSString*)roomId
                        success:(void (^)(NSArray<MXRoomTag*> *tags))success
@@ -4050,6 +4132,7 @@ andUnauthenticatedHandler: (MXRestClientUnauthenticatedHandler)unauthenticatedHa
 #pragma mark - read receipt
 - (MXHTTPOperation*)sendReadReceipt:(NSString*)roomId
                             eventId:(NSString*)eventId
+                           threadId:(NSString*)threadId
                             success:(void (^)(void))success
                             failure:(void (^)(NSError *error))failure
 {
@@ -4057,11 +4140,17 @@ andUnauthenticatedHandler: (MXRestClientUnauthenticatedHandler)unauthenticatedHa
                       apiPathPrefix,
                       roomId,
                       [MXTools encodeURIComponent:eventId]];
+    
+    NSMutableDictionary *parameters = [NSMutableDictionary new];
+    if (threadId)
+    {
+        parameters[@"thread_id"] = threadId;
+    }
 
     MXWeakify(self);
     return [httpClient requestWithMethod:@"POST"
                                     path:path
-                              parameters:[[NSDictionary alloc] init]
+                              parameters:parameters
                                  success:^(NSDictionary *JSONResponse) {
                                      MXStrongifyAndReturnIfNil(self);
                                      [self dispatchSuccess:success];
@@ -5361,21 +5450,16 @@ andUnauthenticatedHandler: (MXRestClientUnauthenticatedHandler)unauthenticatedHa
 
 
 #pragma mark - Direct-to-device messaging
-- (MXHTTPOperation*)sendToDevice:(NSString*)eventType contentMap:(MXUsersDevicesMap<NSDictionary*>*)contentMap
-                           txnId:(NSString*)txnId
+- (MXHTTPOperation*)sendToDevice:(MXToDevicePayload *)payload
                          success:(void (^)(void))success
                          failure:(void (^)(NSError *error))failure
 {
-    if (!txnId)
-    {
-        txnId = [MXTools generateTransactionId];
-    }
     
     // Prepare the path by adding a random transaction id (This id is used to prevent duplicated event).
-    NSString *path = [NSString stringWithFormat:@"%@/sendToDevice/%@/%@", kMXAPIPrefixPathR0, eventType, txnId];
+    NSString *path = [NSString stringWithFormat:@"%@/sendToDevice/%@/%@", kMXAPIPrefixPathR0, payload.eventType, payload.transactionId];
 
     NSDictionary *content = @{
-                              @"messages": contentMap.map
+                              @"messages": payload.messages
                               };
 
     MXWeakify(self);
@@ -5548,6 +5632,33 @@ andUnauthenticatedHandler: (MXRestClientUnauthenticatedHandler)unauthenticatedHa
                                  }];
 }
 
+- (MXHTTPOperation*)deleteDevicesByDeviceIds:(NSArray<NSString*>*)deviceIds
+                                  authParams:(NSDictionary*)authParameters
+                                     success:(void (^)(void))success
+                                     failure:(void (^)(NSError *error))failure
+{
+    NSData *payloadData = nil;
+    if (authParameters)
+    {
+        payloadData = [NSJSONSerialization dataWithJSONObject:@{@"auth": authParameters, @"devices": deviceIds} options:0 error:nil];
+    }
+    
+    MXWeakify(self);
+    return [httpClient requestWithMethod:@"POST"
+                                    path:[NSString stringWithFormat:@"%@/delete_devices", kMXAPIPrefixPathR0]
+                              parameters:nil
+                                    data:payloadData
+                                 headers:@{@"Content-Type": @"application/json"}
+                                 timeout:-1
+                          uploadProgress:nil
+                                 success:^(NSDictionary *JSONResponse) {
+        MXStrongifyAndReturnIfNil(self);
+        [self dispatchSuccess:success];
+    } failure:^(NSError *error) {
+        MXStrongifyAndReturnIfNil(self);
+        [self dispatchFailure:error inBlock:failure];
+    }];
+}
 
 #pragma mark - Cross-Signing
 

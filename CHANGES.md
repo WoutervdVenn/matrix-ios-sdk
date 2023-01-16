@@ -1,3 +1,127 @@
+## Changes in 0.24.7 (2023-01-10)
+
+✨ Features
+
+- Threads: Load the thread list using server-side sorting and pagination ([#6059](https://github.com/vector-im/element-ios/issues/6059))
+
+🙌 Improvements
+
+- Add API to delete user's account data. ([#1651](https://github.com/matrix-org/matrix-ios-sdk/pull/1651))
+- Change Sync parser to delete empty account_data events. ([#1656](https://github.com/matrix-org/matrix-ios-sdk/pull/1656))
+- CryptoV2: Disable notification decryption ([#1662](https://github.com/matrix-org/matrix-ios-sdk/pull/1662))
+- CryptoV2: Verification request and QR listener ([#1663](https://github.com/matrix-org/matrix-ios-sdk/pull/1663))
+- Analytics: Do not track cancellation errors ([#1664](https://github.com/matrix-org/matrix-ios-sdk/pull/1664))
+- Polls: ensure polls are up to date after they are closed. ([#1672](https://github.com/matrix-org/matrix-ios-sdk/pull/1672))
+- Polls: handle decryption errors. ([#1673](https://github.com/matrix-org/matrix-ios-sdk/pull/1673))
+- Polls: add support for rendering/replying to poll ended events. ([#1674](https://github.com/matrix-org/matrix-ios-sdk/pull/1674))
+- Remove commented device property on MXPushRulesRespose. ([#1677](https://github.com/matrix-org/matrix-ios-sdk/pull/1677))
+
+
+## Changes in 0.24.6 (2022-12-13)
+
+🙌 Improvements
+
+- Change invites count logic. ([#1645](https://github.com/matrix-org/matrix-ios-sdk/pull/1645))
+- Crypto: Fail launch when unavailable crypto ([#1646](https://github.com/matrix-org/matrix-ios-sdk/pull/1646))
+- Add message id for to-device events ([#1652](https://github.com/matrix-org/matrix-ios-sdk/pull/1652))
+- CryptoV2: Update to latest Verification API ([#1654](https://github.com/matrix-org/matrix-ios-sdk/pull/1654))
+
+🧱 Build
+
+- Update Ruby gems. ([#1655](https://github.com/matrix-org/matrix-ios-sdk/pull/1655))
+
+
+## Changes in 0.24.5 (2022-11-29)
+
+🙌 Improvements
+
+- CryptoV2: Import progress for room keys ([#1637](https://github.com/matrix-org/matrix-ios-sdk/pull/1637))
+- CryptoV2: Run all tasks with default priority ([#1639](https://github.com/matrix-org/matrix-ios-sdk/pull/1639))
+- CryptoV2: Fix backup performance ([#1641](https://github.com/matrix-org/matrix-ios-sdk/pull/1641))
+- MXSession: Calculate sync progress state ([#1643](https://github.com/matrix-org/matrix-ios-sdk/pull/1643))
+- CryptoV2: Add support to decrypt notifications and receive keys ([#1644](https://github.com/matrix-org/matrix-ios-sdk/pull/1644))
+- Pod: Fix linting on release mode & run fastlane lint on release configuration. ([#1648](https://github.com/matrix-org/matrix-ios-sdk/pull/1648))
+
+
+## Changes in 0.24.4 (2022-11-29)
+
+🙌 Improvements
+
+- CryptoV2: Import progress for room keys ([#1637](https://github.com/matrix-org/matrix-ios-sdk/pull/1637))
+- CryptoV2: Run all tasks with default priority ([#1639](https://github.com/matrix-org/matrix-ios-sdk/pull/1639))
+- CryptoV2: Fix backup performance ([#1641](https://github.com/matrix-org/matrix-ios-sdk/pull/1641))
+- MXSession: Calculate sync progress state ([#1643](https://github.com/matrix-org/matrix-ios-sdk/pull/1643))
+- CryptoV2: Add support to decrypt notifications and receive keys ([#1644](https://github.com/matrix-org/matrix-ios-sdk/pull/1644))
+
+
+## Changes in 0.24.3 (2022-11-15)
+
+✨ Features
+
+- Threads: added support to read receipts (MSC3771) ([#6663](https://github.com/vector-im/element-ios/issues/6663))
+- Threads: added support to notifications count (MSC3773) ([#6664](https://github.com/vector-im/element-ios/issues/6664))
+- Threads: added support to labs flag for read receipts ([#7029](https://github.com/vector-im/element-ios/issues/7029))
+- Threads: notification count in main timeline including un participated threads ([#7038](https://github.com/vector-im/element-ios/issues/7038))
+
+🙌 Improvements
+
+- CryptoV2: Room event decryption ([#1627](https://github.com/matrix-org/matrix-ios-sdk/pull/1627))
+- CryptoV2: Bugfixes ([#1630](https://github.com/matrix-org/matrix-ios-sdk/pull/1630))
+- CryptoV2: Log decryption errors separately ([#1632](https://github.com/matrix-org/matrix-ios-sdk/pull/1632))
+- Adds the sending of read receipts for poll start/end events ([#1633](https://github.com/matrix-org/matrix-ios-sdk/pull/1633))
+
+🐛 Bugfixes
+
+- Tests: Fix or disable flakey integration tests ([#1628](https://github.com/matrix-org/matrix-ios-sdk/pull/1628))
+- Threads: removed "unread_thread_notifications" from sync filters for server that doesn't support MSC3773 ([#7066](https://github.com/vector-im/element-ios/issues/7066))
+- Threads: Display number of unread messages above threads button ([#7076](https://github.com/vector-im/element-ios/issues/7076))
+
+📄 Documentation
+
+- Doc: Update the synapse installation section with poetry usage ([#1625](https://github.com/matrix-org/matrix-ios-sdk/pull/1625))
+
+
+## Changes in 0.24.2 (2022-11-01)
+
+🙌 Improvements
+
+- CryptoV2: Manual key export / import ([#1608](https://github.com/matrix-org/matrix-ios-sdk/pull/1608))
+- CryptoV2: Set local trust and deprecate legacy verification method ([#1613](https://github.com/matrix-org/matrix-ios-sdk/pull/1613))
+- Crypto: Define MXCrypto and MXCrossSigning as protocols ([#1614](https://github.com/matrix-org/matrix-ios-sdk/pull/1614))
+- CryptoV2: Cross-sign self after restoring session ([#1616](https://github.com/matrix-org/matrix-ios-sdk/pull/1616))
+- Crypto: Curate MXCrypto protocol methods ([#1618](https://github.com/matrix-org/matrix-ios-sdk/pull/1618))
+- Crypto: Complete MXCryptoV2 implementation ([#1620](https://github.com/matrix-org/matrix-ios-sdk/pull/1620))
+
+🚧 In development 🚧
+
+- Device Manger: Multi session sign out. ([#1619](https://github.com/vector-im/element-ios/issues/1619))
+
+
+## Changes in 0.24.1 (2022-10-18)
+
+🙌 Improvements
+
+- Support additional content in voice message. ([#1595](https://github.com/matrix-org/matrix-ios-sdk/pull/1595))
+- Key verification: Refactor verification manager, requests, transactions ([#1599](https://github.com/matrix-org/matrix-ios-sdk/pull/1599))
+- Crypto: Refactor QR transactions ([#1602](https://github.com/matrix-org/matrix-ios-sdk/pull/1602))
+- CryptoV2: Integrate Mac-compatible MatrixSDKCrypto ([#1603](https://github.com/matrix-org/matrix-ios-sdk/pull/1603))
+- CryptoV2: Unencrypted verification events ([#1605](https://github.com/matrix-org/matrix-ios-sdk/pull/1605))
+- Crypto: Remove megolm decrypt cache build flag ([#1606](https://github.com/matrix-org/matrix-ios-sdk/pull/1606))
+- Device Manager: Exposed method to update client information. ([#1609](https://github.com/vector-im/element-ios/issues/1609))
+- CryptoV2: Manual device verification ([#6781](https://github.com/vector-im/element-ios/issues/6781))
+- Add support for m.local_notification_settings.<device-id> in account_data ([#6797](https://github.com/vector-im/element-ios/issues/6797))
+- CryptoV2: Incoming verification requests ([#6809](https://github.com/vector-im/element-ios/issues/6809))
+- CryptoV2: QR code verification ([#6859](https://github.com/vector-im/element-ios/issues/6859))
+
+🐛 Bugfixes
+
+- Fix users' display name in messages. ([#6850](https://github.com/vector-im/element-ios/issues/6850))
+
+Others
+
+- Expose rest client method for generating login tokens through MSC3882 ([#1601](https://github.com/matrix-org/matrix-ios-sdk/pull/1601))
+
+
 ## Changes in 0.24.0 (2022-10-04)
 
 🙌 Improvements

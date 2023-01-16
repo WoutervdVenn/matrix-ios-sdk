@@ -533,6 +533,17 @@ FOUNDATION_EXPORT NSString *const kMXPresenceOffline;
 
 @end
 
+/**
+ `MXLoginToken` represents the response of a /login/token creation request
+ */
+@interface MXLoginToken : MXJSONModel
+
+@property (nonatomic) NSString *token;
+
+@property (nonatomic) uint64_t expiresIn;
+
+@end
+
 
 @class MXPushRuleCondition;
 
@@ -767,17 +778,11 @@ FOUNDATION_EXPORT NSString *const kMXPushRuleConditionStringSenderNotificationPe
  Push rule scope definitions - String version
  */
 FOUNDATION_EXPORT NSString *const kMXPushRuleScopeStringGlobal;
-FOUNDATION_EXPORT NSString *const kMXPushRuleScopeStringDevice;
 
 /**
  `MXPushRulesResponse` represents the response to the /pushRules/ request.
  */
 @interface MXPushRulesResponse : MXJSONModel
-
-    /**
-     Set of push rules specific per device.
-     */
-    // @property (nonatomic) NSDictionary *device;
 
     /**
      Set of global push rules.

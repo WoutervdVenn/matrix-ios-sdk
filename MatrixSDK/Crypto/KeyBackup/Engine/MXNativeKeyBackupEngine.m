@@ -35,7 +35,7 @@ static Class DefaultAlgorithmClass;
 
 @interface MXNativeKeyBackupEngine ()
 
-@property (nonatomic, weak) MXCrypto *crypto;
+@property (nonatomic, weak) MXLegacyCrypto *crypto;
 @property (nonatomic, nullable) MXKeyBackupVersion *keyBackupVersion;
 @property (nonatomic, nullable) id<MXKeyBackupAlgorithm> keyBackupAlgorithm;
 
@@ -61,7 +61,7 @@ static Class DefaultAlgorithmClass;
     DefaultAlgorithmClass = MXCurve25519KeyBackupAlgorithm.class;
 }
 
-- (instancetype)initWithCrypto:(MXCrypto *)crypto
+- (instancetype)initWithCrypto:(MXLegacyCrypto *)crypto
 {
     self = [self init];
     if (self)
@@ -319,7 +319,7 @@ static Class DefaultAlgorithmClass;
         return;
     }
     
-    [self.crypto.crossSigning signObject:authData.signalableJSONDictionary withKeyType:MXCrossSigningKeyType.master success:^(NSDictionary *signedObject) {
+    [self.crossSigning signObject:authData.signalableJSONDictionary withKeyType:MXCrossSigningKeyType.master success:^(NSDictionary *signedObject) {
         
         [signatures addEntriesFromDictionary:signedObject[@"signatures"][myUserId]];
         
@@ -392,7 +392,7 @@ static Class DefaultAlgorithmClass;
             else // Try interpreting it as the MSK public key
             {
                 NSError *error;
-                BOOL valid = [self.crypto.crossSigning.crossSigningTools pkVerifyObject:authData.JSONDictionary userId:myUserId publicKey:deviceId error:&error];
+                BOOL valid = [self.crossSigning.crossSigningTools pkVerifyObject:authData.JSONDictionary userId:myUserId publicKey:deviceId error:&error];
                 
                 if (!valid)
                 {
@@ -531,6 +531,12 @@ static Class DefaultAlgorithmClass;
     } failure:failure];
 }
 
+- (NSProgress *)importProgress
+{
+    // Not implemented for legacy backup
+    return nil;
+}
+
 - (void)importKeysWithKeysBackupData:(MXKeysBackupData *)keysBackupData
                           privateKey:(NSData *)privateKey
                     keyBackupVersion:(MXKeyBackupVersion *)keyBackupVersion
@@ -639,6 +645,16 @@ static Class DefaultAlgorithmClass;
             [self.crypto.store deleteSecretWithSecretId:MXSecretId.keyBackup];
         }
     }
+}
+
+- (MXLegacyCrossSigning *)crossSigning
+{
+    if (![self.crypto.crossSigning isKindOfClass:[MXLegacyCrossSigning class]])
+    {
+        MXLogFailure(@"[MXNativeKeyBackupEngine] Using incompatible cross signing implementation, can only use legacy");
+        return nil;
+    }
+    return (MXLegacyCrossSigning *)self.crypto.crossSigning;
 }
 
 @end

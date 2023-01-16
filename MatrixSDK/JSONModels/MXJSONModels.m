@@ -582,6 +582,35 @@ NSString *const kMXPresenceOffline = @"offline";
 
 @end
 
+@interface MXLoginToken()
+
+@property (nonatomic) NSDictionary *json;
+
+@end
+
+@implementation MXLoginToken
+
++ (id)modelFromJSON:(NSDictionary *)JSONDictionary
+{
+    MXLoginToken *loginToken = [[MXLoginToken alloc] init];
+    if (loginToken)
+    {
+        MXJSONModelSetString(loginToken.token, JSONDictionary[@"login_token"]);
+        MXJSONModelSetUInt64(loginToken.expiresIn, JSONDictionary[@"expires_in"]);
+
+        MXJSONModelSetDictionary(loginToken.json, JSONDictionary);
+    }
+    return loginToken;
+}
+
+- (NSDictionary *)JSONDictionary
+{
+    return _json;
+}
+
+@end
+
+
 
 NSString *const kMXPushRuleActionStringNotify       = @"notify";
 NSString *const kMXPushRuleActionStringDontNotify   = @"dont_notify";
@@ -804,7 +833,6 @@ NSString *const kMXPushRuleConditionStringSenderNotificationPermission  = @"send
 @implementation MXPushRulesResponse
 
 NSString *const kMXPushRuleScopeStringGlobal = @"global";
-NSString *const kMXPushRuleScopeStringDevice = @"device";
 
 + (id)modelFromJSON:(NSDictionary *)JSONDictionary
 {
@@ -815,8 +843,6 @@ NSString *const kMXPushRuleScopeStringDevice = @"device";
         {
             pushRulesResponse.global = [MXPushRulesSet modelFromJSON:JSONDictionary[kMXPushRuleScopeStringGlobal] withScope:kMXPushRuleScopeStringGlobal];
         }
-
-        // TODO support device rules
 
         pushRulesResponse->JSONDictionary = JSONDictionary;
     }
@@ -1254,7 +1280,12 @@ NSString *const kMXPushRuleScopeStringDevice = @"device";
 
 - (NSDictionary *)JSONDictionary
 {
-    return self.responseJSON;
+    NSMutableDictionary *dictionary = [self.responseJSON mutableCopy];
+    if (!dictionary[@"failures"])
+    {
+        dictionary[@"failures"] = @{};
+    }
+    return dictionary.copy;
 }
 
 @end

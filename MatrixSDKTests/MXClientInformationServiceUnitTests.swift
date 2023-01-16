@@ -92,7 +92,7 @@ class MXClientInformationServiceUnitTests: XCTestCase {
 
         // must be empty after updateData
         let updatedInfo = session.accountData.accountData(forEventType: type)
-        XCTAssert(updatedInfo?.isEmpty ?? true)
+        XCTAssertNil(updatedInfo)
 
         session.close()
     }
@@ -119,7 +119,7 @@ private class MockSession: MXSession {
     override func setAccountData(_ data: [AnyHashable : Any]!,
                                  forType type: String!,
                                  success: (() -> Void)!,
-                                 failure: ((Error?) -> Void)!) -> MXHTTPOperation! {
+                                 failure: ((Swift.Error?) -> Void)!) -> MXHTTPOperation! {
         isSetAccountDataCalled = true
         return super.setAccountData(data,
                                     forType: type,

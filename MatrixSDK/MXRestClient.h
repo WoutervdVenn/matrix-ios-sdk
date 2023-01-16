@@ -53,6 +53,9 @@
 @class MXSpaceChildrenRequestParameters;
 @class MXCapabilities;
 @class MXDevice;
+@class MXToDevicePayload;
+
+MX_ASSUME_MISSING_NULLABILITY_BEGIN
 
 #pragma mark - Constants definitions
 /**
@@ -88,6 +91,11 @@ FOUNDATION_EXPORT NSString *const kMXAccountDataTypeRecentRoomsKey;
 FOUNDATION_EXPORT NSString *const kMXAccountDataLocalNotificationKeyPrefix;
 FOUNDATION_EXPORT NSString *const kMXAccountDataIsSilencedKey;
 
+/**
+ Threads list request parameters
+ */
+FOUNDATION_EXPORT NSString *const kMXThreadsListIncludeAllParameter;
+FOUNDATION_EXPORT NSString *const kMXThreadsListIncludeParticipatedParameter;
 
 /**
  MXRestClient error domain
@@ -289,7 +297,7 @@ NS_REFINED_FOR_SWIFT;
  @return a MXHTTPOperation instance.
  */
 - (MXHTTPOperation*)supportedMatrixVersions:(void (^)(MXMatrixVersions *matrixVersions))success
-                                    failure:(void (^)(NSError *error))failure;
+                                    failure:(void (^)(NSError *error))failure NS_REFINED_FOR_SWIFT;
 
 /**
  Get the wellknwon data of the homeserver.
@@ -504,6 +512,17 @@ NS_REFINED_FOR_SWIFT;
 - (NSString*)loginFallback NS_REFINED_FOR_SWIFT;
 
 /**
+ Generates a new login token
+ @param success A block object called when the operation succeeds. It provides the raw JSON response
+ from the server.
+ @param failure A block object called when the operation fails.
+ 
+ @return a MXHTTPOperation instance.
+ */
+- (MXHTTPOperation*)generateLoginTokenWithSuccess:(void (^)(MXLoginToken *loginToken))success
+                                          failure:(void (^)(NSError *error))failure NS_REFINED_FOR_SWIFT;
+
+/**
  Reset the account password.
 
  @param parameters a set of parameters containing a threepid credentials and the new password.
@@ -604,6 +623,19 @@ NS_REFINED_FOR_SWIFT;
                            success:(void (^)(void))success
                            failure:(void (^)(NSError *error))failure NS_REFINED_FOR_SWIFT;
 
+/**
+ Delete an account_data event for the client.
+
+ @param type The event type of the account_data to delete (@see kMXAccountDataType* strings)
+ Custom types should be namespaced to avoid clashes.
+ @param success A block object called when the operation succeeds.
+ @param failure A block object called when the operation fails.
+
+ @return a MXHTTPOperation instance.
+ */
+- (MXHTTPOperation*)deleteAccountDataWithType:(NSString*)type
+                                      success:(void (^)(void))success
+                                      failure:(void (^)(NSError *error))failure;
 
 #pragma mark - Filtering
 /**
@@ -1673,6 +1705,23 @@ NS_REFINED_FOR_SWIFT;
                               success:(void (^)(NSString *replacementRoomId))success
                               failure:(void (^)(NSError *error))failure NS_REFINED_FOR_SWIFT;
 
+/**
+ List all the threads of a room.
+ 
+ @param roomId the id of the room.
+ @param include wether the response should include all threads (e.g. `kMXThreadsListIncludeAllParameter`) or only threads participated by the user (e.g. `kMXThreadsListIncludeParticipatedParameter`)
+ @param from the token to pass for doing pagination from a previous response.
+ @param success A block object called when the operation succeeds. It provides the list of root events of the threads and, optionally, the next batch token.
+ @param failure A block object called when the operation fails.
+ 
+ @return a MXHTTPOperation instance.
+ */
+- (MXHTTPOperation*)threadsInRoomWithId:(NSString*)roomId
+                                include:(NSString *)include
+                                   from:(nullable NSString*)from
+                                success:(void (^)(MXAggregationPaginatedResponse *response))success
+                                failure:(void (^)(NSError *error))failure NS_REFINED_FOR_SWIFT;
+
 #pragma mark - Room tags operations
 /**
  List the tags of a room.
@@ -2259,6 +2308,7 @@ Note: Clients should consider avoiding this endpoint for URLs posted in encrypte
  */
 - (MXHTTPOperation*)sendReadReceipt:(NSString*)roomId
                             eventId:(NSString*)eventId
+                           threadId:(nullable NSString*)threadId
                             success:(void (^)(void))success
                             failure:(void (^)(NSError *error))failure NS_REFINED_FOR_SWIFT;
 
@@ -2693,17 +2743,14 @@ Note: Clients should consider avoiding this endpoint for URLs posted in encrypte
 /**
  Send an event to a specific list of devices
 
- @param eventType the type of event to send
- @param contentMap content to send. Map from user_id to device_id to content dictionary.
- @param txnId the transaction id to use. If nil, one will be generated.
+ @param payload Payload with `eventType` and `contentMap` to be sent
 
  @param success A block object called when the operation succeeds.
  @param failure A block object called when the operation fails.
 
  @return a MXHTTPOperation instance.
  */
-- (MXHTTPOperation*)sendToDevice:(NSString*)eventType contentMap:(MXUsersDevicesMap<NSDictionary*>*)contentMap
-                           txnId:(NSString*)txnId
+- (MXHTTPOperation*)sendToDevice:(MXToDevicePayload*)payload
                          success:(void (^)(void))success
                          failure:(void (^)(NSError *error))failure NS_REFINED_FOR_SWIFT;
 
@@ -2778,6 +2825,22 @@ Note: Clients should consider avoiding this endpoint for URLs posted in encrypte
                                    success:(void (^)(void))success
                                    failure:(void (^)(NSError *error))failure NS_REFINED_FOR_SWIFT;
 
+/**
+ Deletes the given devices, and invalidates any access token associated with them.
+ 
+ @discussion This API endpoint uses the User-Interactive Authentication API.
+ 
+ @param deviceIds The identifiers for devices.
+ @param authParameters The additional authentication information for the user-interactive authentication API.
+ @param success A block object called when the operation succeeds.
+ @param failure A block object called when the operation fails.
+ 
+ @return a MXHTTPOperation instance.
+ */
+- (MXHTTPOperation*)deleteDevicesByDeviceIds:(NSArray<NSString*>*)deviceIds
+                                  authParams:(NSDictionary*)authParameters
+                                     success:(void (^)(void))success
+                                     failure:(void (^)(NSError *error))failure NS_REFINED_FOR_SWIFT;
 
 #pragma mark - Cross-Signing
 
@@ -2986,3 +3049,5 @@ Note: Clients should consider avoiding this endpoint for URLs posted in encrypte
                                               failure:(void (^)(NSError *error))failure NS_REFINED_FOR_SWIFT;
 
 @end
+
+MX_ASSUME_MISSING_NULLABILITY_END

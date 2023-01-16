@@ -176,12 +176,18 @@ FOUNDATION_EXPORT NSInteger const kMXRoomInvalidInviteSenderErrorCode;
 
 /**
  Indicate if the room is tagged as a direct chat.
+ 
+ @warning: This is an O(n) computed property that iterates through all
+ direct rooms to determine whether any particular room is direct.
  */
 @property (nonatomic, readonly) BOOL isDirect;
 
 /**
  The user identifier for whom this room is tagged as direct (if any).
  nil if the room is not a direct chat.
+ 
+ @warning: This is an O(n) computed property that iterates through all
+ direct rooms to determine given direct user id.
  */
 @property (nonatomic, readonly) NSString *directUserId;
 
@@ -1291,10 +1297,12 @@ Remove a tag applied on an event of the room
  Returns the read receipts list for an event, excluding the read receipt from the current user.
 
  @param eventId The event Id.
+ @param threadId The thread Id. Use `kMXEventTimelineMain` for the main timeline.
  @param sort YES to sort them from the latest to the oldest.
  @param completion Completion block containing the receipts for an event in a dedicated room.
  */
 - (void)getEventReceipts:(nonnull NSString*)eventId
+                threadId:(nonnull NSString*)threadId
                   sorted:(BOOL)sort
               completion:(nonnull void (^)(NSArray<MXReceiptData*> * _Nonnull))completion;
 
@@ -1305,11 +1313,12 @@ Remove a tag applied on an event of the room
 
  @param receiptType the receipt type (like kMXEventTypeStringRead).
  @param eventId the id of the event.
+ @param threadId the id of the thread (nil for unthread read receipt).
  @param userId the user who generates the receipt.
  @param ts the receipt timestamp in ms since Epoch.
  @return YES if the receipt data is valid and has been stored.
  */
-- (BOOL)storeLocalReceipt:(NSString*)receiptType eventId:(NSString*)eventId userId:(NSString*)userId ts:(uint64_t)ts;
+- (BOOL)storeLocalReceipt:(NSString*)receiptType eventId:(NSString*)eventId threadId:(nullable NSString*)threadId userId:(NSString*)userId ts:(uint64_t)ts;
 
 
 #pragma mark - Read marker handling

@@ -103,6 +103,16 @@ extern const struct MXMatrixVersionsFeatureStruct MXMatrixVersionsFeature;
  */
 @property (nonatomic, readonly) BOOL supportsRemotelyTogglingPushNotifications;
 
+/**
+ Indicate if the server supports logging in via a QR
+ */
+@property (nonatomic, readonly) BOOL supportsQRLogin;
+
+/**
+ Indicate if the server supports notifications for threads (MSC3773)
+ */
+@property (nonatomic, readonly) BOOL supportsNotificationsForThreads;
+
 @end
 
 NS_ASSUME_NONNULL_END
