@@ -16,11 +16,8 @@
 
 import Foundation
 import XCTest
-@testable import MatrixSDK
-
-#if DEBUG
-
 import MatrixSDKCrypto
+@testable import MatrixSDK
 
 class MXCryptoMigrationStoreUnitTests: XCTestCase {
     
@@ -45,6 +42,22 @@ class MXCryptoMigrationStoreUnitTests: XCTestCase {
     
     func extractData(pickleKey: Data? = nil) throws -> MigrationData {
         try store.extractData(with: pickleKey ?? self.pickleKey)
+    }
+    
+    func extractSessions(pickleKey: Data? = nil) throws -> [PickledSession] {
+        var sessions = [PickledSession]()
+        store.extractSessions(with: pickleKey ?? self.pickleKey, batchSize: .max) { batch, progress in
+            sessions += batch
+        }
+        return sessions
+    }
+    
+    func extractGroupSessions(pickleKey: Data? = nil) throws -> [PickledInboundGroupSession] {
+        var sessions = [PickledInboundGroupSession]()
+        store.extractGroupSessions(with: pickleKey ?? self.pickleKey, batchSize: .max) { batch, progress in
+            sessions += batch
+        }
+        return sessions
     }
     
     @discardableResult
@@ -76,6 +89,19 @@ class MXCryptoMigrationStoreUnitTests: XCTestCase {
     
     // MARK: - Tests
     
+    func test_credentials() {
+        XCTAssertEqual(store.userId, "Alice")
+        XCTAssertEqual(store.deviceId, "ABC")
+    }
+    
+    func test_trustedSettings() {
+        legacyStore.globalBlacklistUnverifiedDevices = false
+        XCTAssertFalse(store.globalSettings.onlyAllowTrustedDevices)
+        
+        legacyStore.globalBlacklistUnverifiedDevices = true
+        XCTAssertTrue(store.globalSettings.onlyAllowTrustedDevices)
+    }
+    
     func test_missingAccountFailsExtraction() {
         legacyStore.setAccount(nil)
         do {
@@ -106,8 +132,11 @@ class MXCryptoMigrationStoreUnitTests: XCTestCase {
         legacyStore.store(session)
         let pickle = try session.session.serializeData(withKey: pickleKey)
         
-        let sessions = try extractData().sessions
+        // There are no sessions in the general migration data
+        XCTAssertTrue(try extractData().sessions.isEmpty)
         
+        // But they can be accumulated by batching
+        let sessions = try extractSessions()
         XCTAssertEqual(sessions.count, 1)
         XCTAssertEqual(sessions[0].pickle, pickle)
         XCTAssertEqual(sessions[0].senderKey, "XYZ")
@@ -116,22 +145,27 @@ class MXCryptoMigrationStoreUnitTests: XCTestCase {
         XCTAssertEqual(sessions[0].lastUseTime, "123")
     }
     
-    func test_extractsMultipleSession() throws {
-        for i in 0 ..< 3 {
+    func test_extractsMultipleSessionsInBatches() throws {
+        for i in 0 ..< 12 {
             legacyStore.store(MXOlmSession(olmSession: OLMSession(), deviceKey: "\(i)"))
         }
         
-        let sessions = try extractData().sessions
-        
-        XCTAssertEqual(sessions.count, 3)
+        // There are no sessions in the general migration data
+        XCTAssertTrue(try extractData().sessions.isEmpty)
+        // But they can be accumulated by batching
+        let sessions = try extractSessions()
+        XCTAssertEqual(sessions.count, 12)
     }
     
     func test_extractsGroupSession() throws {
         let session = storeGroupSession(roomId: "abcd")
         let pickle = try session.session.serializeData(withKey: pickleKey)
         
-        let sessions = try extractData().inboundGroupSessions
+        // There are no sessions in the general migration data
+        XCTAssertTrue(try extractData().inboundGroupSessions.isEmpty)
         
+        // But they can be accumulated by batching
+        let sessions = try extractGroupSessions()
         XCTAssertEqual(sessions.count, 1)
         XCTAssertEqual(sessions[0].pickle, pickle)
         XCTAssertEqual(sessions[0].senderKey, "Bob")
@@ -146,8 +180,11 @@ class MXCryptoMigrationStoreUnitTests: XCTestCase {
             storeGroupSession(senderKey: isValid ? "Bob" : nil)
         }
         
-        let sessions = try extractData().inboundGroupSessions
+        // There are no sessions in the general migration data
+        XCTAssertTrue(try extractData().inboundGroupSessions.isEmpty)
         
+        // But they can be accumulated by batching
+        let sessions = try extractGroupSessions()
         XCTAssertEqual(sessions.count, 2)
     }
     
@@ -156,7 +193,7 @@ class MXCryptoMigrationStoreUnitTests: XCTestCase {
         storeGroupSession(isUntrusted: false)
         storeGroupSession(isUntrusted: false)
         
-        let sessions = try extractData().inboundGroupSessions
+        let sessions = try extractGroupSessions()
         
         XCTAssertEqual(sessions.count, 3)
         XCTAssertTrue(sessions[0].imported)
@@ -169,7 +206,7 @@ class MXCryptoMigrationStoreUnitTests: XCTestCase {
         storeGroupSession(backedUp: true)
         storeGroupSession(backedUp: false)
         
-        let sessions = try extractData().inboundGroupSessions
+        let sessions = try extractGroupSessions()
         
         XCTAssertEqual(sessions.count, 3)
         XCTAssertFalse(sessions[0].backedUp)
@@ -226,6 +263,22 @@ class MXCryptoMigrationStoreUnitTests: XCTestCase {
         
         XCTAssertEqual(Set(trackedUsers), ["Bob", "Carol", "Dave"])
     }
+    
+    func test_extractsRoomSettings() throws {
+        legacyStore.storeAlgorithm(forRoom: "room1", algorithm: kMXCryptoOlmAlgorithm)
+        legacyStore.storeBlacklistUnverifiedDevices(inRoom: "room1", blacklist: true)
+        
+        legacyStore.storeAlgorithm(forRoom: "room2", algorithm: kMXCryptoMegolmAlgorithm)
+        legacyStore.storeBlacklistUnverifiedDevices(inRoom: "room2", blacklist: false)
+        
+        legacyStore.storeAlgorithm(forRoom: "room3", algorithm: "something invalid")
+        legacyStore.storeBlacklistUnverifiedDevices(inRoom: "room3", blacklist: true)
+        
+        let settings = try extractData().roomSettings
+        
+        XCTAssertEqual(settings, [
+            "room1": RoomSettings(algorithm: .olmV1Curve25519AesSha2, onlyAllowTrustedDevices: true),
+            "room2": RoomSettings(algorithm: .megolmV1AesSha2, onlyAllowTrustedDevices: false),
+        ])
+    }
 }
-
-#endif

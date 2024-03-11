@@ -71,10 +71,6 @@ public class MXMemoryCryptoStore: NSObject, MXCryptoStore {
     public static func deleteReadonlyStore(with credentials: MXCredentials!) {
         // no-op
     }
-
-    public func open(_ onComplete: (() -> Void)!, failure: ((Error?) -> Void)!) {
-        onComplete?()
-    }
     
     // MARK: - User ID
     
@@ -187,6 +183,23 @@ public class MXMemoryCryptoStore: NSObject, MXCryptoStore {
     public func algorithm(forRoom roomId: String!) -> String! {
         algorithms[roomId]?.algorithm
     }
+    
+    // MARK: - Room Settings
+    
+    public func roomSettings() -> [MXRoomSettings]! {
+        return algorithms.compactMap { roomId, item in
+            do {
+                return try MXRoomSettings(
+                    roomId: roomId,
+                    algorithm: item.algorithm,
+                    blacklistUnverifiedDevices: item.blacklistUnverifiedDevices
+                )
+            } catch {
+                MXLog.debug("[MXMemoryCryptoStore] roomSettings: Failed creating algorithm", context: error)
+                return nil
+            }
+        }
+    }
 
     // MARK: - OLM Session
 
@@ -209,8 +222,12 @@ public class MXMemoryCryptoStore: NSObject, MXCryptoStore {
         Array(olmSessions.filter { $0.key.deviceKey == deviceKey }.values)
     }
     
-    public func sessions() -> [MXOlmSession]! {
-        Array(olmSessions.values)
+    public func enumerateSessions(by batchSize: Int, block: (([MXOlmSession]?, Double) -> Void)!) {
+        block(Array(olmSessions.values), 1)
+    }
+    
+    public func sessionsCount() -> UInt {
+        UInt(olmSessions.count)
     }
 
     // MARK: - Inbound Group Sessions
@@ -230,6 +247,11 @@ public class MXMemoryCryptoStore: NSObject, MXCryptoStore {
 
     public func inboundGroupSessions() -> [MXOlmInboundGroupSession]! {
         inboundSessions.map { $0.session }
+    }
+    
+    public func enumerateInboundGroupSessions(by batchSize: Int, block: (([MXOlmInboundGroupSession]?, Set<String>?, Double) -> Void)!) {
+        let backedUp = inboundSessions.filter { $0.backedUp }.map(\.sessionId)
+        block(inboundGroupSessions(), Set(backedUp), 1)
     }
 
     public func inboundGroupSessions(withSessionId sessionId: String!) -> [MXOlmInboundGroupSession]! {
@@ -415,6 +437,10 @@ public class MXMemoryCryptoStore: NSObject, MXCryptoStore {
 
     public func storeSecret(_ secret: String, withSecretId secretId: String) {
         secrets[secretId] = secret
+    }
+    
+    public func hasSecret(withSecretId secretId: String) -> Bool {
+        return secrets[secretId] != nil
     }
 
     public func secret(withSecretId secretId: String) -> String? {

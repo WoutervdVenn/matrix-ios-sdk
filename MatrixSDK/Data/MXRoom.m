@@ -82,11 +82,6 @@ NSInteger const kMXRoomInvalidInviteSenderErrorCode = 9002;
      FIFO queue of failure blocks waiting for [self members:].
      */
     NSMutableArray<void (^)(NSError *)> *pendingMembersFailureBlocks;
-    
-    /**
-     The manager for sharing keys of messages with invited users
-     */
-    MXSharedHistoryKeyManager *sharedHistoryKeyManager;
 }
 @end
 
@@ -123,14 +118,6 @@ NSInteger const kMXRoomInvalidInviteSenderErrorCode = 9002;
     {
         _roomId = roomId;
         mxSession = mxSession2;
-        
-        if ([mxSession.crypto isKindOfClass:[MXLegacyCrypto class]])
-        {
-            MXMegolmDecryption *decryption = [[MXMegolmDecryption alloc] initWithCrypto:mxSession.crypto];
-            sharedHistoryKeyManager = [[MXSharedHistoryKeyManager alloc] initWithRoomId:roomId
-                                                                                 crypto:mxSession.crypto
-                                                                                service:decryption];
-        }
 
         if (store)
         {
@@ -1033,7 +1020,7 @@ NSInteger const kMXRoomInvalidInviteSenderErrorCode = 9002;
         kMXMessageBodyKey: filename,
         @"url": fakeMediaURI,
         @"info": [@{
-            @"mimetype": mimetype,
+            @"mimetype": (mimetype ?: @"application/octet-stream"),
             @"w": @(imageSize.width),
             @"h": @(imageSize.height),
             @"size": @(imageData.length)
@@ -1360,7 +1347,7 @@ NSInteger const kMXRoomInvalidInviteSenderErrorCode = 9002;
             }
 
             // update metadata with result of converter output
-            msgContent[@"info"][@"mimetype"] = mimetype;
+            msgContent[@"info"][@"mimetype"] = (mimetype ?: @"application/octet-stream");
             msgContent[@"info"][@"w"] = @(size.width);
             msgContent[@"info"][@"h"] = @(size.height);
             msgContent[@"info"][@"duration"] = @((int)floor(durationInMs));
@@ -1683,7 +1670,7 @@ NSInteger const kMXRoomInvalidInviteSenderErrorCode = 9002;
         kMXMessageBodyKey: filename,
         @"url": fakeMediaURI,
         @"info": @{
-                @"mimetype": mimeType,
+                @"mimetype": (mimeType ?: @"application/octet-stream"),
                 @"size": @(fileData.length)
         },
         kMXMessageContentKeyExtensibleTextMSC1767: filename,
@@ -1691,7 +1678,7 @@ NSInteger const kMXRoomInvalidInviteSenderErrorCode = 9002;
                 kMXMessageContentKeyExtensibleFileSize: @(fileData.length),
                 kMXMessageContentKeyExtensibleFileName: filename,
                 kMXMessageContentKeyExtensibleFileURL: fakeMediaURI,
-                kMXMessageContentKeyExtensibleFileMimeType: mimeType
+                kMXMessageContentKeyExtensibleFileMimeType: (mimeType ?: @"application/octet-stream")
         }.mutableCopy}.mutableCopy;
     
     if(additionalTypes.count)
@@ -1977,22 +1964,7 @@ NSInteger const kMXRoomInvalidInviteSenderErrorCode = 9002;
                        success:(void (^)(void))success
                        failure:(void (^)(NSError *error))failure
 {
-    if (MXSDKOptions.sharedInstance.enableRoomSharedHistoryOnInvite)
-    {
-        [self shareRoomKeysWith:userId];
-    }
     return [mxSession.matrixRestClient inviteUser:userId toRoom:self.roomId success:success failure:failure];
-}
-
-- (void)shareRoomKeysWith:(NSString *)userId
-{
-    // The value of 20 is arbitrary and imprecise, we merely want to ensure that when a user is invited to a room
-    // they are able to read any immediately preciding messages that may be relevant to the invite.
-    NSInteger numberOfSharedMessage = 20;
-    id<MXEventsEnumerator> enumerator = [self enumeratorForStoredMessagesWithTypeIn:@[kMXEventTypeStringRoomMessage]];
-    [sharedHistoryKeyManager shareMessageKeysWithUserId:userId
-                                      messageEnumerator:enumerator
-                                                  limit:numberOfSharedMessage];
 }
 
 - (MXHTTPOperation*)inviteUserByEmail:(NSString*)email
@@ -2070,6 +2042,30 @@ NSInteger const kMXRoomInvalidInviteSenderErrorCode = 9002;
                         failure:(void (^)(NSError *error))failure
 {
     return [mxSession.matrixRestClient redactEvent:eventId inRoom:self.roomId reason:reason success:success failure:failure];
+}
+
+- (MXHTTPOperation*)redactEvent:(NSString*)eventId
+                  withRelations:(NSArray<NSString *>*)relations
+                         reason:(NSString*)reason
+                        success:(void (^)(void))success
+                        failure:(void (^)(NSError *error))failure
+{
+    BOOL isFeatureWithRelationsSupported = (mxSession.store.supportedMatrixVersions.supportsRedactionWithRelations || mxSession.store.supportedMatrixVersions.supportsRedactionWithRelationsUnstable);
+    BOOL isFeatureWithRelationsStable = mxSession.store.supportedMatrixVersions.supportsRedactionWithRelations;
+
+    if ((relations != nil || [relations count] > 0) && !isFeatureWithRelationsSupported)
+    {
+        MXLogDebug(@"[MXRoom] redaction with relations is not supported (MSC3912)");
+    }
+    
+    return [mxSession.matrixRestClient redactEvent:eventId
+                                            inRoom:self.roomId
+                                            reason:reason
+                                             txnId:nil
+                                     withRelations:isFeatureWithRelationsSupported ? relations : nil
+                             withRelationsIsStable:isFeatureWithRelationsStable
+                                           success:success
+                                           failure:failure];
 }
 
 - (MXHTTPOperation *)reportEvent:(NSString *)eventId
@@ -2194,15 +2190,9 @@ NSInteger const kMXRoomInvalidInviteSenderErrorCode = 9002;
     }
     if (eventToReply.eventType == MXEventTypePollEnd)
     {
-        MXEvent* pollStartEvent = [mxSession.store eventWithEventId:eventToReply.relatesTo.eventId inRoom:self.roomId];
-        
-        if (pollStartEvent) {
-            NSString *question = [MXEventContentPollStart modelFromJSON:pollStartEvent.content].question;
-            senderMessageBody = question;
-        } else {
-            // we need a fallback to avoid crashes since the m.poll.start event may be missing.
-            senderMessageBody = eventToReply.relatesTo.eventId;
-        }
+        // The "Ended poll" text is not meant to be localized from the sender side.
+        // This is why here we use a "default localizer" providing the english version of it.
+        senderMessageBody = MXSendReplyEventDefaultStringLocalizer.new.endedPollMessage;
     }
     else if (eventToReply.eventType == MXEventTypeBeaconInfo)
     {
@@ -2278,8 +2268,7 @@ NSInteger const kMXRoomInvalidInviteSenderErrorCode = 9002;
         *replyContentFormattedBody = [self replyMessageFormattedBodyFromEventToReply:eventToReply
                                                           senderMessageFormattedBody:senderMessageFormattedBody
                                                               isSenderMessageAnEmote:isSenderMessageAnEmote
-                                                               replyFormattedMessage:finalFormattedTextMessage
-                                                                     stringLocalizer:stringLocalizer];
+                                                               replyFormattedMessage:finalFormattedTextMessage];
     }
 }
 
@@ -2369,7 +2358,6 @@ NSInteger const kMXRoomInvalidInviteSenderErrorCode = 9002;
  @param senderMessageFormattedBody The message body of the sender.
  @param isSenderMessageAnEmote Indicate if the sender message is an emote (/me).
  @param replyFormattedMessage The response for the sender message. HTML formatted string if any otherwise non formatted string as reply formatted body is mandatory.
- @param stringLocalizer string localizations used when building formatted body.
  
  @return reply message body.
  */
@@ -2377,7 +2365,6 @@ NSInteger const kMXRoomInvalidInviteSenderErrorCode = 9002;
                             senderMessageFormattedBody:(NSString*)senderMessageFormattedBody
                                 isSenderMessageAnEmote:(BOOL)isSenderMessageAnEmote
                                  replyFormattedMessage:(NSString*)replyFormattedMessage
-                                       stringLocalizer:(id<MXSendReplyEventStringLocalizerProtocol>)stringLocalizer
 {
     NSString *eventId = eventToReply.eventId;
     NSString *roomId = eventToReply.roomId;
@@ -2423,7 +2410,9 @@ NSInteger const kMXRoomInvalidInviteSenderErrorCode = 9002;
     [replyMessageFormattedBody appendString:@"<mx-reply><blockquote>"];
     
     // Add event link
-    [replyMessageFormattedBody appendFormat:@"<a href=\"%@\">%@</a> ", eventPermalink, stringLocalizer.messageToReplyToPrefix];
+    // The "In reply to" string is not meant to be localized from the sender side.
+    // This is how here we use the default string localizer to send the english version of it.
+    [replyMessageFormattedBody appendFormat:@"<a href=\"%@\">%@</a> ", eventPermalink, MXSendReplyEventDefaultStringLocalizer.new.messageToReplyToPrefix];
     
     if (isSenderMessageAnEmote)
     {
@@ -2566,9 +2555,11 @@ NSInteger const kMXRoomInvalidInviteSenderErrorCode = 9002;
     MXEventContentRelatesTo *relatesTo = [[MXEventContentRelatesTo alloc] initWithRelationType:MXEventRelationTypeReference
                                                                                        eventId:pollStartEvent.eventId];
     
+    MXSendReplyEventDefaultStringLocalizer* localizer = MXSendReplyEventDefaultStringLocalizer.new;
     NSDictionary *content = @{
         kMXEventRelationRelatesToKey: relatesTo.JSONDictionary,
-        kMXMessageContentKeyExtensiblePollEndMSC3381: @{}
+        kMXMessageContentKeyExtensiblePollEndMSC3381: @{},
+        kMXMessageContentKeyExtensibleTextMSC1767: localizer.endedPollMessage
     };
     
     return [self sendEventOfType:[MXTools eventTypeString:MXEventTypePollEnd] content:content threadId:threadId localEcho:localEcho success:success failure:failure];
@@ -3331,8 +3322,32 @@ NSInteger const kMXRoomInvalidInviteSenderErrorCode = 9002;
     }
 }
 
+- (void)setUnread
+{
+    [mxSession.store setUnreadForRoom:self.roomId];
+    if ([mxSession.store respondsToSelector:@selector(commit)])
+    {
+        [mxSession.store commit];
+    }
+}
+
+- (void)resetUnread
+{
+    [mxSession.store resetUnreadForRoom:self.roomId];
+    if ([mxSession.store respondsToSelector:@selector(commit)])
+    {
+        [mxSession.store commit];
+    }
+}
+
+- (BOOL)isMarkedAsUnread
+{
+    return [mxSession.store isRoomMarkedAsUnread:self.roomId];
+}
+
 - (void)markAllAsRead
 {
+    [self resetUnread];
     NSString *readMarkerEventId = nil;
     MXReceiptData *updatedReceiptData = nil;
     
@@ -3827,7 +3842,7 @@ NSInteger const kMXRoomInvalidInviteSenderErrorCode = 9002;
 
 - (NSString *)description
 {
-    return [NSString stringWithFormat:@"<MXRoom: %p> %@: %@ - %@", self, self.roomId, self.summary.displayname, self.summary.topic];
+    return [NSString stringWithFormat:@"<MXRoom: %p> %@: %@ - %@", self, self.roomId, self.summary.displayName, self.summary.topic];
 }
 
 - (NSComparisonResult)compareLastMessageEventOriginServerTs:(MXRoom *)otherRoom

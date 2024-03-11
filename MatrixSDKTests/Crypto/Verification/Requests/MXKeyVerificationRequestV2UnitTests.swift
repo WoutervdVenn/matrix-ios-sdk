@@ -16,9 +16,6 @@
 
 import Foundation
 import XCTest
-
-#if DEBUG
-
 import MatrixSDKCrypto
 @testable import MatrixSDK
 
@@ -131,7 +128,7 @@ class MXKeyVerificationRequestV2UnitTests: XCTestCase {
     func test_cancelledByMeState() {
         let request = makeRequest()
         
-        request.onChange(state: .cancelled(cancelInfo: .init(cancelCode: "123", reason: "Changed mind", cancelledByUs: true)))
+        request.onChange(state: .cancelled(cancelInfo: .init(reason: "Changed mind", cancelCode: "123", cancelledByUs: true)))
         
         XCTAssertEqual(request.reasonCancelCode?.value, "123")
         XCTAssertEqual(request.reasonCancelCode?.humanReadable, "Changed mind")
@@ -141,7 +138,7 @@ class MXKeyVerificationRequestV2UnitTests: XCTestCase {
     func test_cancelledByThemState() {
         let request = makeRequest()
         
-        request.onChange(state: .cancelled(cancelInfo: .init(cancelCode: "123", reason: "Changed mind", cancelledByUs: false)))
+        request.onChange(state: .cancelled(cancelInfo: .init(reason: "Changed mind", cancelCode: "123", cancelledByUs: false)))
         
         XCTAssertEqual(request.reasonCancelCode?.value, "123")
         XCTAssertEqual(request.reasonCancelCode?.humanReadable, "Changed mind")
@@ -214,5 +211,3 @@ class MXKeyVerificationRequestV2UnitTests: XCTestCase {
         waitForExpectations(timeout: 1)
     }
 }
-
-#endif

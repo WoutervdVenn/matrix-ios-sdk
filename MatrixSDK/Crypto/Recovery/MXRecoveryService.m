@@ -58,8 +58,10 @@ NSString *const MXRecoveryServiceErrorDomain = @"org.matrix.sdk.recoveryService"
                               MXSecretId.crossSigningSelfSigning,
                               MXSecretId.crossSigningUserSigning,
                               MXSecretId.keyBackup,
+                              MXSecretId.dehydratedDevice
                               ];
     }
+    
     return self;
 }
 
@@ -218,7 +220,7 @@ NSString *const MXRecoveryServiceErrorDomain = @"org.matrix.sdk.recoveryService"
 
 - (BOOL)hasSecretLocally:(NSString*)secretId
 {
-    return ([self.dependencies.secretStore secretWithSecretId:secretId] != nil);
+    return ([self.dependencies.secretStore hasSecretWithSecretId:secretId]);
 }
 
 - (NSArray*)secretsStoredLocally
@@ -690,7 +692,6 @@ NSString *const MXRecoveryServiceErrorDomain = @"org.matrix.sdk.recoveryService"
     });
 }
 
-
 - (void)recoverKeyBackupWithSuccess:(void (^)(void))success
                             failure:(void (^)(NSError *error))failure
 {
@@ -740,19 +741,14 @@ NSString *const MXRecoveryServiceErrorDomain = @"org.matrix.sdk.recoveryService"
     
     [self.dependencies.crossSigning refreshStateWithSuccess:^(BOOL stateUpdated) {
         
-        // Check if the service really needs to be started
-        if (self.dependencies.crossSigning.canCrossSign)
-        {
-            MXLogDebug(@"[MXRecoveryService] recoverCrossSigning: Cross-signing is already up");
-            success();
-            return;
-        }
+        NSString *userId = self.dependencies.credentials.userId;
+        NSString *deviceId = self.dependencies.credentials.deviceId;
 
         // Mark our user MSK as verified locally
-        [self.delegate setUserVerification:YES forUser:self.dependencies.credentials.userId success:^{
+        [self.delegate setUserVerification:YES forUser:userId success:^{
             
             // Cross sign our current device
-            [self.dependencies.crossSigning crossSignDeviceWithDeviceId:self.dependencies.credentials.deviceId success:^{
+            [self.dependencies.crossSigning crossSignDeviceWithDeviceId:deviceId userId:userId success:^{
                 
                 // And update the state
                 [self.dependencies.crossSigning refreshStateWithSuccess:^(BOOL stateUpdated) {

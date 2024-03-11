@@ -35,6 +35,7 @@
 
 @class OLMAccount;
 @class OLMOutboundGroupSession;
+@class MXRoomSettings;
 
 /**
  The `MXCryptoStore` protocol defines an interface that must be implemented in order to store
@@ -82,17 +83,6 @@
  @return the store. Call the open method before using it.
  */
 - (instancetype)initWithCredentials:(MXCredentials *)credentials;
-
-/**
- Open the store corresponding to the passed account.
-
- The implementation can use a separated thread for loading data but the callback blocks
- must be called from the main thread.
-
- @param onComplete the callback called once the data has been loaded.
- @param failure the callback called in case of error.
- */
-- (void)open:(void (^)(void))onComplete failure:(void (^)(NSError *error))failure;
 
 /**
  The user id.
@@ -259,6 +249,11 @@
 - (NSString*)algorithmForRoom:(NSString*)roomId;
 
 /**
+ Fetch all stored room settings, containing room algorithm and other crypto options
+ */
+- (NSArray <MXRoomSettings *> *)roomSettings;
+
+/**
  Store a session between this device and another device.
 
  @param session the end-to-end session.
@@ -296,11 +291,22 @@
 - (NSArray<MXOlmSession*>*)sessionsWithDevice:(NSString*)deviceKey;
 
 /**
- Retrieve all end-to-end sessions between this device and all other devices
-
- @return a array of end-to-end sessions.
+ Enumerate all end-to-end sessions in batches of `batchSize`
+ 
+ Each block is internally wrapped in `@autoreleasepool` so that memory footprint remains constant
+ regardless of the number of stored sessions.
+ 
+ @param batchSize the max number of sessions in a single batch
+ @param block function that will be executed with each batch, incl. list of sessions and current progress of batching
  */
-- (NSArray<MXOlmSession*>*)sessions;
+- (void)enumerateSessionsBy:(NSInteger)batchSize
+                      block:(void (^)(NSArray <MXOlmSession *> *sessions,
+                                      double progress))block;
+
+/**
+ The number of stored end-to-end sessions
+ */
+- (NSUInteger)sessionsCount;
 
 /**
  Store inbound group sessions.
@@ -336,6 +342,19 @@
  */
 - (NSArray<MXOlmInboundGroupSession*> *)inboundGroupSessions;
 
+/**
+ Enumerate all inbound group sessions in batches of `batchSize`
+ 
+ Each block is internally wrapped in `@autoreleasepool` so that memory footprint remains constant
+ regardless of the number of stored sessions.
+ 
+ @param batchSize the max number of sessions in a single batch
+ @param block function that will be executed with each batch, incl. list of sessions and current progress of batching
+ */
+- (void)enumerateInboundGroupSessionsBy:(NSInteger)batchSize
+                                  block:(void (^)(NSArray <MXOlmInboundGroupSession *> *sessions,
+                                                  NSSet <NSString *> *backedUp,
+                                                  double progress))block;
 
 /**
  Store outbound group session.

@@ -15,9 +15,6 @@
 //
 
 import Foundation
-
-#if DEBUG
-
 import MatrixSDKCrypto
 
 extension Device {
@@ -43,9 +40,8 @@ extension Device {
             displayName: displayName,
             isBlocked: isBlocked,
             locallyTrusted: locallyTrusted,
-            crossSigningTrusted: crossSigningTrusted
+            crossSigningTrusted: crossSigningTrusted,
+            firstTimeSeenTs: 0
         )
     }
 }
-
-#endif

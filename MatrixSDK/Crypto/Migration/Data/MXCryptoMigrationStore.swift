@@ -15,31 +15,111 @@
 //
 
 import Foundation
-
-#if DEBUG
-
 import OLMKit
 import MatrixSDKCrypto
 
 struct MXCryptoMigrationStore {
+    struct GlobalSettings {
+        let onlyAllowTrustedDevices: Bool
+    }
+    
     enum Error: Swift.Error {
         case missingAccount
     }
     
     let legacyStore: MXCryptoStore
     
+    var userId: String? {
+        legacyStore.userId()
+    }
+    
+    var deviceId: String? {
+        legacyStore.deviceId()
+    }
+    
+    var olmSessionCount: UInt {
+        legacyStore.sessionsCount()
+    }
+    
+    var megolmSessionCount: UInt {
+        legacyStore.inboundGroupSessionsCount(false)
+    }
+    
+    var globalSettings: GlobalSettings {
+        .init(onlyAllowTrustedDevices: legacyStore.globalBlacklistUnverifiedDevices)
+    }
+    
     func extractData(with pickleKey: Data) throws -> MigrationData {
         return .init(
             account: try pickledAccount(pickleKey: pickleKey),
-            sessions: olmSessions(pickleKey: pickleKey),
-            inboundGroupSessions: megolmSessions(pickleKey: pickleKey),
+            sessions: [], // Sessions are extracted in batches separately
+            inboundGroupSessions: [], // Group sessions are extracted in batches separately
+            pickleKey: [UInt8](pickleKey),
             backupVersion: legacyStore.backupVersion,
             backupRecoveryKey: backupRecoveryKey(),
-            pickleKey: [UInt8](pickleKey),
             crossSigning: crossSigning(),
-            trackedUsers: trackedUsers()
+            trackedUsers: trackedUsers(),
+            roomSettings: extractRoomSettings()
         )
     }
+    
+    func extractSessions(
+        with pickleKey: Data,
+        batchSize: Int,
+        callback: @escaping ([PickledSession], Double) -> Void
+    ) {
+        legacyStore.enumerateSessions(by: batchSize) { sessions, progress in
+            let pickled: [PickledSession] = sessions?.compactMap {
+                do {
+                    return try PickledSession(session: $0, pickleKey: pickleKey)
+                } catch {
+                    MXLog.error("[MXCryptoMigrationStore] cannot extract olm session", context: error)
+                    return nil
+                }
+            } ?? []
+            callback(pickled, progress)
+        }
+    }
+    
+    func extractGroupSessions(
+        with pickleKey: Data,
+        batchSize: Int,
+        callback: @escaping ([PickledInboundGroupSession], Double) -> Void
+    ) {
+        legacyStore.enumerateInboundGroupSessions(by: batchSize) { sessions, backedUp, progress in
+            let pickled: [PickledInboundGroupSession] = sessions?.compactMap {
+                do {
+                    return try PickledInboundGroupSession(
+                        session: $0,
+                        pickleKey: pickleKey,
+                        backedUp: backedUp?.contains($0.session.sessionIdentifier()) == true
+                    )
+                } catch {
+                    MXLog.error("[MXCryptoMigrationStore] cannot extract megolm session", context: error)
+                    return nil
+                }
+            } ?? []
+            callback(pickled, progress)
+        }
+    }
+    
+    func extractRoomSettings() -> [String: RoomSettings] {
+        return legacyStore
+            .roomSettings()
+            .reduce(into: [String: RoomSettings]()) { dict, item in
+                do {
+                    let algorithm = try EventEncryptionAlgorithm(string: item.algorithm)
+                    dict[item.roomId] = RoomSettings(
+                        algorithm: algorithm,
+                        onlyAllowTrustedDevices: item.blacklistUnverifiedDevices
+                    )
+                } catch {
+                    MXLog.error("[MXCryptoMigrationStore] cannot extract room settings", context: error)
+                }
+            }
+    }
+    
+    // MARK: - Private
     
     private func pickledAccount(pickleKey: Data) throws -> PickledAccount {
         guard
@@ -55,43 +135,6 @@ struct MXCryptoMigrationStore {
             account: account,
             pickleKey: pickleKey
         )
-    }
-    
-    private func olmSessions(pickleKey: Data) -> [PickledSession] {
-        return legacyStore
-            .sessions()?
-            .compactMap {
-                do {
-                    return try PickledSession(session: $0, pickleKey: pickleKey)
-                } catch {
-                    MXLog.error("[MXCryptoMigrationStore] cannot extract olm session", context: error)
-                    return nil
-                }
-            } ?? []
-    }
-    
-    private func megolmSessions(pickleKey: Data) -> [PickledInboundGroupSession] {
-        guard let sessions = legacyStore.inboundGroupSessions() else {
-            return []
-        }
-        
-        let sessionsToBackup = Set(
-            legacyStore.inboundGroupSessions(toBackup: UInt.max)
-                .compactMap { $0.session?.sessionIdentifier() }
-        )
-        
-        return sessions.compactMap {
-            do {
-                return try PickledInboundGroupSession(
-                    session: $0,
-                    pickleKey: pickleKey,
-                    backedUp: !sessionsToBackup.contains($0.session?.sessionIdentifier() ?? "")
-                )
-            } catch {
-                MXLog.error("[MXCryptoMigrationStore] cannot extract megolm session", context: error)
-                return nil
-            }
-        }
     }
     
     private func backupRecoveryKey() -> String? {
@@ -189,5 +232,3 @@ private extension PickledInboundGroupSession {
         )
     }
 }
-
-#endif

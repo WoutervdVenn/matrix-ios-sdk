@@ -17,9 +17,9 @@
 import Foundation
 
 /// Light-weight crypto protocol to be used with background services
-/// that can recieve room keys and decrypt notification messages
+/// that can receive room keys and decrypt notification messages
 protocol MXBackgroundCrypto {
-    func handleSyncResponse(_ syncResponse: MXSyncResponse)
+    func handleSyncResponse(_ syncResponse: MXSyncResponse) async
     func canDecryptEvent(_ event: MXEvent) -> Bool
     func decryptEvent(_ event: MXEvent) throws
 }

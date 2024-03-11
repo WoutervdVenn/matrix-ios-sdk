@@ -40,6 +40,7 @@
 
 @class MXSession;
 @class MXRoom;
+@class DehydrationService;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -113,6 +114,8 @@ extern NSString *const MXDeviceListDidUpdateUsersDevicesNotification;
  Service to manage backup of private keys on the homeserver.
  */
 @property (nonatomic, readonly) MXRecoveryService *recoveryService;
+
+@property (nonatomic, readonly) DehydrationService *dehydrationService;
 
 #pragma mark - Crypto start / close
 
@@ -403,13 +406,17 @@ MX_ASSUME_MISSING_NULLABILITY_BEGIN
                                         error:(NSError **)error;
 
 /**
- Check if the user has previously enabled crypto.
- If yes, init the crypto module.
+ Initialize the crypto module
+ 
+ If the user has previously enabled crypto it will be opened, otherwise a new crypto
+ store will be created.
 
+ @param migrationProgress a block called repeatedly with percentage of migration done, if any necessasry
  @param complete a block called in any case when the operation completes.
  */
-+ (void)checkCryptoWithMatrixSession:(MXSession*)mxSession
-                            complete:(void (^)(id<MXCrypto> crypto, NSError *error))complete;
++ (void)initializeCryptoWithMatrixSession:(MXSession*)mxSession
+                        migrationProgress:(void (^)(double progress))migrationProgress
+                                 complete:(void (^)(id<MXCrypto> crypto, NSError *error))complete;
 
 /**
  Stores the exportedOlmDevice related to the credentials into the store.

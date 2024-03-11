@@ -962,6 +962,24 @@ FOUNDATION_EXPORT NSInteger const kMXRoomInvalidInviteSenderErrorCode;
                         failure:(void (^)(NSError *error))failure NS_REFINED_FOR_SWIFT;
 
 /**
+ Redact an event and all related events in this room.
+ 
+ @param eventId the id of the redacted event.
+ @param relations the list of relation types (optional).
+ @param reason the redaction reason (optional).
+ 
+ @param success A block object called when the operation succeeds.
+ @param failure A block object called when the operation fails.
+
+ @return a MXHTTPOperation instance.
+ */
+- (MXHTTPOperation*)redactEvent:(NSString*)eventId
+                  withRelations:(NSArray<NSString *>*)relations
+                         reason:(NSString*)reason
+                        success:(void (^)(void))success
+                        failure:(void (^)(NSError *error))failure;
+
+/**
  Report an event in this room.
 
  @param eventId the id of the event event.
@@ -1285,6 +1303,23 @@ Remove a tag applied on an event of the room
  @param updateReadMarker tell whether the read marker should be moved to this event.
  */
 - (void)acknowledgeEvent:(MXEvent*)event andUpdateReadMarker:(BOOL)updateReadMarker;
+
+/**
+ It will set the entire room as unread.
+ This is only local since it's not possible to remove from the server the read events.
+ */
+-(void)setUnread;
+
+/**
+ It will unset the entire room from unread list.
+ This is only a local list.
+ */
+-(void)resetUnread;
+
+/**
+ it will return if the room is marked unread by the user
+ */
+@property (nonatomic, readonly) BOOL isMarkedAsUnread;
 
 /**
  Move the read marker to the latest event.

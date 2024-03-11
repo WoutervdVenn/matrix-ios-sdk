@@ -98,7 +98,7 @@ static NSString* const kMXLoginFlowTypeKey = @"type";
     if (_avatarUrl) { jsonDictionary[@"avatar_url"] = _avatarUrl; }
     if (_roomTypeString) { jsonDictionary[@"room_type"] = _roomTypeString; }
 
-    return jsonDictionary;
+    return jsonDictionary.copy;
 }
 
 @end
@@ -1126,11 +1126,6 @@ NSString *const kMXPushRuleScopeStringGlobal = @"global";
 @end
 
 @interface MXKeysQueryResponse ()
-
-/**
- The original JSON used to create the response model
- */
-@property (nonatomic, copy) NSDictionary *responseJSON;
 @end
 
 @implementation MXKeysQueryResponse
@@ -1140,8 +1135,6 @@ NSString *const kMXPushRuleScopeStringGlobal = @"global";
     MXKeysQueryResponse *keysQueryResponse = [[MXKeysQueryResponse alloc] init];
     if (keysQueryResponse)
     {
-        keysQueryResponse.responseJSON = JSONDictionary;
-        
         // Devices keys
         NSMutableDictionary *map = [NSMutableDictionary dictionary];
 
@@ -1225,7 +1218,31 @@ NSString *const kMXPushRuleScopeStringGlobal = @"global";
 
 - (NSDictionary *)JSONDictionary
 {
-    return self.responseJSON;
+    NSMutableDictionary *deviceKeys = [[NSMutableDictionary alloc] init];
+    for (NSString *userId in self.deviceKeys.userIds) {
+        NSMutableDictionary *devices = [[NSMutableDictionary alloc] init];
+        for (NSString *deviceId in [self.deviceKeys deviceIdsForUser:userId]) {
+            devices[deviceId] = [self.deviceKeys objectForDevice:deviceId forUser:userId].JSONDictionary.copy;
+        }
+        deviceKeys[userId] = devices.copy;
+    }
+    
+    NSMutableDictionary *master = [[NSMutableDictionary alloc] init];
+    NSMutableDictionary *selfSigning = [[NSMutableDictionary alloc] init];
+    NSMutableDictionary *userSigning = [[NSMutableDictionary alloc] init];
+    for (NSString *userId in self.crossSigningKeys) {
+        master[userId] = self.crossSigningKeys[userId].masterKeys.JSONDictionary.copy;
+        selfSigning[userId] = self.crossSigningKeys[userId].selfSignedKeys.JSONDictionary.copy;
+        userSigning[userId] = self.crossSigningKeys[userId].userSignedKeys.JSONDictionary.copy;
+    }
+    
+    return @{
+        @"device_keys": deviceKeys.copy ?: @{},
+        @"failures": self.failures.copy ?: @{},
+        @"master_keys": master.copy ?: @{},
+        @"self_signing_keys": selfSigning.copy ?: @{},
+        @"user_signing_keys": userSigning.copy ?: @{}
+    };
 }
 
 @end
@@ -2148,62 +2165,37 @@ NSString *const kMXPushRuleScopeStringGlobal = @"global";
 
 @end
 
-#pragma mark - Dehydration
+#pragma mark - Device Dehydration
 
-@implementation MXDehydratedDevice
-
-+ (id)modelFromJSON:(NSDictionary *)JSONDictionary
-{
-    MXDehydratedDevice *device = [[MXDehydratedDevice alloc] init];
-    if (device)
-    {
-        MXJSONModelSetString(device.deviceId, JSONDictionary[@"device_id"]);
-        NSDictionary *deviceData = nil;
-        MXJSONModelSetDictionary(deviceData, JSONDictionary[@"device_data"]);
-        MXJSONModelSetString(device.account, deviceData[@"account"]);
-        MXJSONModelSetString(device.algorithm, deviceData[@"algorithm"]);
-        MXJSONModelSetString(device.passphrase, deviceData[@"passphrase"]);
-    }
-    
-    return device;
-}
-
-- (instancetype)initWithCoder:(NSCoder *)aDecoder
-{
-    self = [super init];
-    if (self)
-    {
-        _deviceId = [aDecoder decodeObjectForKey:@"device_id"];
-        _account = [aDecoder decodeObjectForKey:@"account"];
-        _algorithm = [aDecoder decodeObjectForKey:@"algorithm"];
-        _passphrase = [aDecoder decodeObjectForKey:@"passphrase"];
-    }
-    return self;
-}
-
-- (void)encodeWithCoder:(NSCoder *)aCoder
-{
-    [aCoder encodeObject:_deviceId forKey:@"device_id"];
-    [aCoder encodeObject:_account forKey:@"account"];
-    [aCoder encodeObject:_algorithm forKey:@"algorithm"];
-    if (_passphrase)
-    {
-        [aCoder encodeObject:_passphrase forKey:@"passphrase"];
-    }
-}
+@implementation MXDehydratedDeviceCreationParameters : MXJSONModel
 
 - (NSDictionary *)JSONDictionary
 {
-    NSMutableDictionary *dictionary = [[NSMutableDictionary alloc] initWithDictionary:@{
-        @"algorithm": self.algorithm,
-        @"account": self.account
-    }];
-    
-    if (self.passphrase)
-    {
-        dictionary[@"passphrase"] = self.passphrase;
-    }
-    return dictionary;
+    return [MXTools deserialiseJSONString:self.body];
+}
+
+@end
+
+@implementation MXDehydratedDeviceResponse
+
++ (instancetype)modelFromJSON:(NSDictionary *)JSONDictionary
+{
+    MXDehydratedDeviceResponse *dehydratedDevice = [[MXDehydratedDeviceResponse alloc] init];
+    MXJSONModelSetString(dehydratedDevice.deviceId, JSONDictionary[@"device_id"]);
+    MXJSONModelSetDictionary(dehydratedDevice.deviceData, JSONDictionary[@"device_data"]);
+    return dehydratedDevice;
+}
+
+@end
+
+@implementation MXDehydratedDeviceEventsResponse
+
++ (instancetype)modelFromJSON:(NSDictionary *)JSONDictionary
+{
+    MXDehydratedDeviceEventsResponse *dehydratedDevice = [[MXDehydratedDeviceEventsResponse alloc] init];
+    MXJSONModelSetArray(dehydratedDevice.events, JSONDictionary[@"events"]);
+    MXJSONModelSetString(dehydratedDevice.nextBatch, JSONDictionary[@"next_batch"]);
+    return dehydratedDevice;
 }
 
 @end

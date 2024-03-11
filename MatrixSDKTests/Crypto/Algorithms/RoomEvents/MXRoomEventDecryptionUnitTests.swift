@@ -1,4 +1,4 @@
-// 
+//
 // Copyright 2022 The Matrix.org Foundation C.I.C
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,8 +16,6 @@
 
 import Foundation
 @testable import MatrixSDK
-
-#if DEBUG
 
 import MatrixSDKCrypto
 
@@ -39,12 +37,12 @@ class MXRoomEventDecryptionUnitTests: XCTestCase {
         }
     }
     
-    var decryptor: DecryptorStub!
-    var roomDecryptor: MXRoomEventDecryption!
+    var handler: DecryptorStub!
+    var decryptor: MXRoomEventDecryption!
     
     override func setUp() {
-        decryptor = DecryptorStub()
-        roomDecryptor = MXRoomEventDecryption(handler: decryptor)
+        handler = DecryptorStub()
+        decryptor = MXRoomEventDecryption(handler: handler)
     }
     
     // MARK: - Decrypt
@@ -57,11 +55,11 @@ class MXRoomEventDecryptionUnitTests: XCTestCase {
             id: "1",
             sessionId: "123"
         )
-        decryptor.stubbedEvents = [
+        handler.stubbedEvents = [
             "1": .stub(clearEvent: plain)
         ]
         
-        let results = await roomDecryptor.decrypt(events: [event])
+        let results = await decryptor.decrypt(events: [event])
         
         XCTAssertEqual(results.first?.clearEvent as? [String: String], plain)
     }
@@ -85,11 +83,11 @@ class MXRoomEventDecryptionUnitTests: XCTestCase {
             )
         ]
         
-        decryptor.stubbedEvents = [
+        handler.stubbedEvents = [
             "2": .stub(clearEvent: plain)
         ]
         
-        let results = await roomDecryptor.decrypt(events: events)
+        let results = await decryptor.decrypt(events: events)
         
         XCTAssertEqual(results.count, 3)
         XCTAssertNotNil(results[0].error)
@@ -103,8 +101,10 @@ class MXRoomEventDecryptionUnitTests: XCTestCase {
         let events = await prepareEventsForRedecryption()
         let invalidEvent = MXEvent.fixture(id: 123)
         
-        await roomDecryptor.handlePossibleRoomKeyEvent(invalidEvent)
-        await waitForDecryption()
+        await decryptor.handlePossibleRoomKeyEvent(invalidEvent)
+        // We do not expect anything to be decrypted, so there is no notification or other signal to listen to
+        // We will simply wait an entire second and assert nothing was decrypted
+        try! await Task.sleep(nanoseconds: 1_000_000_000)
         
         XCTAssertNil(events[0].clear)
         XCTAssertNil(events[1].clear)
@@ -115,8 +115,8 @@ class MXRoomEventDecryptionUnitTests: XCTestCase {
         let events = await prepareEventsForRedecryption()
         let roomKey = MXEvent.roomKeyFixture(sessionId: "123")
         
-        await roomDecryptor.handlePossibleRoomKeyEvent(roomKey)
-        await waitForDecryption()
+        await decryptor.handlePossibleRoomKeyEvent(roomKey)
+        await waitForDecryption(events: events)
 
         XCTAssertNotNil(events[0].clear)
         XCTAssertNil(events[1].clear)
@@ -127,8 +127,8 @@ class MXRoomEventDecryptionUnitTests: XCTestCase {
         let events = await prepareEventsForRedecryption()
         let roomKey = MXEvent.forwardedRoomKeyFixture(sessionId: "123")
         
-        await roomDecryptor.handlePossibleRoomKeyEvent(roomKey)
-        await waitForDecryption()
+        await decryptor.handlePossibleRoomKeyEvent(roomKey)
+        await waitForDecryption(events: events)
 
         XCTAssertNotNil(events[0].clear)
         XCTAssertNil(events[1].clear)
@@ -140,8 +140,8 @@ class MXRoomEventDecryptionUnitTests: XCTestCase {
     func test_retryUndecryptedEvents() async {
         let events = await prepareEventsForRedecryption()
         
-        await roomDecryptor.retryUndecryptedEvents(sessionIds: ["123", "456"])
-        await waitForDecryption()
+        await decryptor.retryUndecryptedEvents(sessionIds: ["123", "456"])
+        await waitForDecryption(events: events)
         
         XCTAssertNotNil(events[0].clear)
         XCTAssertNotNil(events[1].clear)
@@ -173,7 +173,7 @@ class MXRoomEventDecryptionUnitTests: XCTestCase {
         
         // Attempt to decrypt these events, which will produce errors
         // and add them to an internal undecrypted events cache
-        let results = await roomDecryptor.decrypt(events: events)
+        let results = await decryptor.decrypt(events: events)
         for (event, result) in zip(events, results) {
             event.setClearData(result)
         }
@@ -181,7 +181,7 @@ class MXRoomEventDecryptionUnitTests: XCTestCase {
         // Now stub out decryption result so that if these events are decrypted again
         // we get the correct result
         let decrypted = DecryptedEvent.stub(clearEvent: ["type": "m.decrypted"])
-        decryptor.stubbedEvents = [
+        handler.stubbedEvents = [
             "1": decrypted,
             "2": decrypted,
             "3": decrypted
@@ -190,12 +190,21 @@ class MXRoomEventDecryptionUnitTests: XCTestCase {
         return events
     }
     
-    private func waitForDecryption() async {
+    private func waitForDecryption(events: [MXEvent]) async {
         // When decrypting successfully, a notification will be triggered on the main thread, so we have to
         // make sure we wait until this happens. We cannot listen to notifications directly, because
         // repeated decryption failures will not trigger any. Instead simply wait a little while.
-        try! await Task.sleep(nanoseconds: 1_000_000)
+        
+        // Maximum 100 attempts each pausing for a tenth of a second
+        for _ in 0 ..< 100 {
+            
+            // As soon as at least one event is decrypted, we assume all are and return
+            if events.contains(where: { $0.clear != nil }) {
+                return
+            }
+            
+            // Otherwise wait for a 0.1 second and run the next loop cycle
+            try! await Task.sleep(nanoseconds: 100_000_000)
+        }
     }
 }
-
-#endif

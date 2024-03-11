@@ -34,7 +34,6 @@ typedef NS_ENUM(NSUInteger, MXCallTransferType)
     MXCallTransferTypeLocal
 };
 
-
 #pragma mark - Build time options
 
 /**
@@ -49,7 +48,7 @@ typedef NS_ENUM(NSUInteger, MXCallTransferType)
 
 NS_ASSUME_NONNULL_BEGIN
 
-@protocol MXBackgroundModeHandler;
+@protocol MXBackgroundModeHandler, MXCryptoV2MigrationDelegate;
 
 /**
  SDK options that can be set at the launch time.
@@ -204,17 +203,12 @@ NS_ASSUME_NONNULL_BEGIN
  */
 @property (nonatomic) BOOL enableRoomSharedHistoryOnInvite;
 
-#if DEBUG
-
 /**
- Enable Crypto module V2, a work-in-progress and NOT production-ready implementation
- of [matrix-rust-sdk](https://github.com/matrix-org/matrix-rust-sdk/tree/main/crates/matrix-sdk-crypto).
+ The delegate for migrating account data from legacy crypto to rust-based Crypto SDK
  
- @remark NO by default.
+ By default, nil.
  */
-@property (nonatomic) BOOL enableCryptoV2;
-
-#endif
+@property (nonatomic, nullable, weak) id<MXCryptoV2MigrationDelegate> cryptoMigrationDelegate;
 
 /**
  Enable symmetric room key backups
@@ -229,14 +223,6 @@ NS_ASSUME_NONNULL_BEGIN
  @remark NO by default
  */
 @property (nonatomic) BOOL enableNewClientInformationFeature;
-
-/**
- Enable the calculating of progress during sync, incl counting the number
- of attempts to sync with the server and percentage of response data processed.
- 
- @remark NO by default
- */
-@property (nonatomic) BOOL enableSyncProgress;
 
 @end
 

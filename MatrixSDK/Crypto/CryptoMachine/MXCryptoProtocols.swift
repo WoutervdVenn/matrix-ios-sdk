@@ -15,9 +15,6 @@
 //
 
 import Foundation
-
-#if DEBUG
-
 import MatrixSDKCrypto
 
 /// A set of protocols defining the functionality in `MatrixSDKCrypto` and separating them into logical units
@@ -32,11 +29,14 @@ protocol MXCryptoIdentity {
 
 /// Handler for cryptographic events in the sync loop
 protocol MXCryptoSyncing: MXCryptoIdentity {
+    
+    @MainActor
     func handleSyncResponse(
         toDevice: MXToDeviceSyncResponse?,
         deviceLists: MXDeviceListResponse?,
         deviceOneTimeKeysCounts: [String: NSNumber],
-        unusedFallbackKeys: [String]?
+        unusedFallbackKeys: [String]?,
+        nextBatchToken: String
     ) throws -> MXToDeviceSyncResponse
     
     func processOutgoingRequests() async throws
@@ -51,6 +51,7 @@ protocol MXCryptoSyncing: MXCryptoIdentity {
 protocol MXCryptoDevicesSource: MXCryptoIdentity {
     func device(userId: String, deviceId: String) -> Device?
     func devices(userId: String) -> [Device]
+    func dehydratedDevices() -> DehydratedDevicesProtocol
 }
 
 /// Source of user identities and their cryptographic trust status
@@ -64,6 +65,13 @@ protocol MXCryptoUserIdentitySource: MXCryptoIdentity {
 
 /// Room event encryption
 protocol MXCryptoRoomEventEncrypting: MXCryptoIdentity {
+    var onlyAllowTrustedDevices: Bool { get set }
+    
+    func isUserTracked(userId: String) -> Bool
+    func updateTrackedUsers(_ users: [String])
+    func roomSettings(roomId: String) -> RoomSettings?
+    func setRoomAlgorithm(roomId: String, algorithm: EventEncryptionAlgorithm) throws
+    func setOnlyAllowTrustedDevices(for roomId: String, onlyAllowTrustedDevices: Bool) throws
     func shareRoomKeysIfNecessary(roomId: String, users: [String], settings: EncryptionSettings) async throws
     func encryptRoomEvent(content: [AnyHashable: Any], roomId: String, eventType: String) throws -> [String: Any]
     func discardRoomKey(roomId: String)
@@ -76,17 +84,20 @@ protocol MXCryptoRoomEventDecrypting: MXCryptoIdentity {
 }
 
 /// Cross-signing functionality
-protocol MXCryptoCrossSigning: MXCryptoUserIdentitySource {
+protocol MXCryptoCrossSigning: MXCryptoUserIdentitySource, MXCryptoDevicesSource {
     func refreshCrossSigningStatus() async throws
     func crossSigningStatus() -> CrossSigningStatus
     func bootstrapCrossSigning(authParams: [AnyHashable: Any]) async throws
     func exportCrossSigningKeys() -> CrossSigningKeyExport?
     func importCrossSigningKeys(export: CrossSigningKeyExport)
+    
+    func queryMissingSecretsFromOtherSessions() async throws
 }
 
 /// Verification functionality
 protocol MXCryptoVerifying: MXCryptoIdentity {
-    func receiveUnencryptedVerificationEvent(event: MXEvent, roomId: String)
+    func downloadKeysIfNecessary(users: [String]) async throws
+    func receiveVerificationEvent(event: MXEvent, roomId: String) async throws
     func requestSelfVerification(methods: [String]) async throws -> VerificationRequestProtocol
     func requestVerification(userId: String, roomId: String, methods: [String]) async throws -> VerificationRequestProtocol
     func requestVerification(userId: String, deviceId: String, methods: [String]) async throws -> VerificationRequestProtocol
@@ -125,4 +136,3 @@ enum MXVerification {
     case qrCode(QrCodeProtocol)
 }
 
-#endif

@@ -156,14 +156,6 @@ NSTimeInterval kMXCryptoMinForceSessionPeriod = 3600.0; // one hour
     __block id<MXCrypto> crypto;
 
 #ifdef MX_CRYPTO
-    
-    #if DEBUG
-    if (MXSDKOptions.sharedInstance.enableCryptoV2)
-    {
-        return [self createCryptoV2WithSession:mxSession error:error];
-    }
-    #endif
-    
     dispatch_queue_t cryptoQueue = [MXLegacyCrypto dispatchQueueForUser:mxSession.matrixRestClient.credentials.userId];
     dispatch_sync(cryptoQueue, ^{
 
@@ -177,27 +169,18 @@ NSTimeInterval kMXCryptoMinForceSessionPeriod = 3600.0; // one hour
     return crypto;
 }
 
-+ (void)checkCryptoWithMatrixSession:(MXSession *)mxSession
-                            complete:(void (^)(id<MXCrypto> crypto, NSError *error))complete
++ (void)initializeCryptoWithMatrixSession:(MXSession *)mxSession
+                        migrationProgress:(void (^)(double))migrationProgress
+                                 complete:(void (^)(id<MXCrypto> crypto, NSError *error))complete
 {
 #ifdef MX_CRYPTO
-    #if DEBUG
-    if (MXSDKOptions.sharedInstance.enableCryptoV2)
-    {
-        NSError *error;
-        id<MXCrypto> crypto = [self createCryptoV2WithSession:mxSession error:&error];
-        complete(crypto, error);
-        return;
-    }
-    #endif
-    
-    [self checkLegacyCryptoWithMatrixSession:mxSession complete:complete];
+    [self initalizeLegacyCryptoWithMatrixSession:mxSession complete:complete];
 #else
     complete(nil);
 #endif
 }
 
-+ (void)checkLegacyCryptoWithMatrixSession:(MXSession*)mxSession complete:(void (^)(id<MXCrypto> crypto, NSError *error))complete
++ (void)initalizeLegacyCryptoWithMatrixSession:(MXSession*)mxSession complete:(void (^)(id<MXCrypto> crypto, NSError *error))complete
 {
 #ifdef MX_CRYPTO
 
@@ -213,27 +196,16 @@ NSTimeInterval kMXCryptoMinForceSessionPeriod = 3600.0; // one hour
         {
             MXLogDebug(@"[MXCrypto] checkCryptoWithMatrixSession: Crypto store exists");
 
-            // If it already exists, open and init crypto
+            // If it already exists, init store and crypto
             MXCryptoStoreClass *cryptoStore = [[MXCryptoStoreClass alloc] initWithCredentials:mxSession.matrixRestClient.credentials];
 
-            [cryptoStore open:^{
+            MXLogDebug(@"[MXCrypto] checkCryptoWithMatrixSession: Crypto store initialized");
 
-                MXLogDebug(@"[MXCrypto] checkCryptoWithMatrixSession: Crypto store opened");
+            id<MXCrypto> crypto = [[MXLegacyCrypto alloc] initWithMatrixSession:mxSession cryptoQueue:cryptoQueue andStore:cryptoStore];
 
-                id<MXCrypto> crypto = [[MXLegacyCrypto alloc] initWithMatrixSession:mxSession cryptoQueue:cryptoQueue andStore:cryptoStore];
-
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    complete(crypto, nil);
-                });
-
-            } failure:^(NSError *error) {
-
-                MXLogDebug(@"[MXCrypto] checkCryptoWithMatrixSession: Crypto store failed to open. Error: %@", error);
-                
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    complete(nil, error);
-                });
-            }];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                complete(crypto, nil);
+            });
         }
         else if ([MXSDKOptions sharedInstance].enableCryptoWhenStartingMXSession
                  // Without the device id provided by the hs, the crypto does not work
@@ -1098,7 +1070,7 @@ NSTimeInterval kMXCryptoMinForceSessionPeriod = 3600.0; // one hour
             {
                 // Cross-sign our own device
                 MXLogDebug(@"[MXCrypto] setDeviceVerificationForDevice: Mark device %@ as self verified", deviceId);
-                [self.crossSigning crossSignDeviceWithDeviceId:deviceId success:success failure:failure];
+                [self.crossSigning crossSignDeviceWithDeviceId:deviceId userId:userId success:success failure:failure];
                 
                 // Wait the end of cross-sign before returning
                 return;
@@ -2663,8 +2635,11 @@ NSTimeInterval kMXCryptoMinForceSessionPeriod = 3600.0; // one hour
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(onToDeviceEvent:) name:kMXSessionOnToDeviceEventNotification object:self.mxSession];
 
         // Observe membership changes
+        MXWeakify(self);
         self->roomMembershipEventsListener = [self.mxSession listenToEventsOfTypes:@[kMXEventTypeStringRoomEncryption, kMXEventTypeStringRoomMember] onEvent:^(MXEvent *event, MXTimelineDirection direction, id customObject) {
 
+            MXStrongifyAndReturnIfNil(self);
+            
             if (direction == MXTimelineDirectionForwards)
             {
                 if (event.eventType == MXEventTypeRoomEncryption)
